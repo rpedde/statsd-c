@@ -77,9 +77,9 @@ pthread_t thread_udp;
 pthread_t thread_mgmt;
 pthread_t thread_flush;
 pthread_t thread_queue;
-int port = PORT, mgmt_port = MGMT_PORT, ganglia_port = GANGLIA_PORT, flush_interval = FLUSH_INTERVAL;
-int debug = 0, friendly = 0, clear_stats = 0, daemonize = 0, enable_gmetric = 0;
-char *serialize_file = NULL, *ganglia_host = NULL, *ganglia_spoof = NULL, *ganglia_metric_prefix = NULL, *lock_file = NULL;
+int port = PORT, mgmt_port = MGMT_PORT, ganglia_port = GANGLIA_PORT, flush_interval = FLUSH_INTERVAL, carbon_port = CARBON_PORT;
+int debug = 0, friendly = 0, clear_stats = 0, daemonize = 0, enable_gmetric = 0, enable_carbon = 0;
+char *serialize_file = NULL, *ganglia_host = NULL, *ganglia_spoof = NULL, *ganglia_metric_prefix = NULL, *lock_file = NULL, *carbon_host = NULL;
 
 /*
  * FUNCTION PROTOTYPES
@@ -119,7 +119,7 @@ void cleanup() {
   pthread_cancel(thread_flush);
   pthread_cancel(thread_udp);
   pthread_cancel(thread_mgmt);
-  pthread_cancel(thread_queue);
+  /* pthread_cancel(thread_queue); */
 
   if (stats_udp_socket) {
     syslog(LOG_INFO, "Closing UDP stats socket.");
@@ -240,6 +240,8 @@ void syntax(char *argv[]) {
   fprintf(stderr, "\t-g port           ganglia port (default 8649)\n");
   fprintf(stderr, "\t-S spoofhost      ganglia spoof host (default statsd:statsd)\n");
   fprintf(stderr, "\t-P prefix         ganglia metric prefix (default is none)\n");
+  fprintf(stderr, "\t-R host           carbon line-receiver host (default disabled)\n");
+  fprintf(stderr, "\t-r port           carbon line-receiver port (default 2003)\n");
   fprintf(stderr, "\t-l lockfile       lock file (only used when daemonizing)\n");
   fprintf(stderr, "\t-h                this help display\n");
   fprintf(stderr, "\t-d                enable debug\n");
@@ -264,7 +266,7 @@ int main(int argc, char *argv[]) {
 
   queue_init();
 
-  while ((opt = getopt(argc, argv, "dDfhp:m:s:cg:G:F:S:P:l:")) != -1) {
+  while ((opt = getopt(argc, argv, "dDfhp:m:s:cg:G:F:S:P:l:R:r:")) != -1) {
     switch (opt) {
       case 'd':
         printf("Debug enabled.\n");
@@ -311,6 +313,15 @@ int main(int argc, char *argv[]) {
         ganglia_spoof = strdup(optarg);
         printf("Ganglia spoof host %s\n", ganglia_spoof);
         break;
+      case 'R':
+        carbon_host = strdup(optarg);
+        enable_carbon = 1;
+        printf("Carbon line-receiver %s\n", carbon_host);
+        break;
+      case 'r':
+        carbon_port = atoi(optarg);
+        printf("Carbon port %d\n", carbon_port);
+        break;
       case 'P':
         ganglia_metric_prefix = strdup(optarg);
         printf("Ganglia metric prefix %s\n", ganglia_metric_prefix);
@@ -353,7 +364,7 @@ int main(int argc, char *argv[]) {
   pthread_create (&thread_udp,   daemonize ? &attr : NULL, (void *) &p_thread_udp,   (void *) &pids[0]);
   pthread_create (&thread_mgmt,  daemonize ? &attr : NULL, (void *) &p_thread_mgmt,  (void *) &pids[1]);
   pthread_create (&thread_flush, daemonize ? &attr : NULL, (void *) &p_thread_flush, (void *) &pids[2]);
-  pthread_create (&thread_queue, daemonize ? &attr : NULL, (void *) &p_thread_queue, (void *) &pids[3]);
+  /* pthread_create (&thread_queue, daemonize ? &attr : NULL, (void *) &p_thread_queue, (void *) &pids[3]); */
 
   if (daemonize) {
     syslog(LOG_DEBUG, "Destroying pthread attributes");
@@ -365,15 +376,15 @@ int main(int argc, char *argv[]) {
     CHECK_PTHREAD_DETACH();
     rc = pthread_detach(thread_flush);
     CHECK_PTHREAD_DETACH();
-    rc = pthread_detach(thread_queue);
-    CHECK_PTHREAD_DETACH();
+    /* rc = pthread_detach(thread_queue); */
+    /* CHECK_PTHREAD_DETACH(); */
     for (;;) { }
   } else {
     syslog(LOG_DEBUG, "Waiting for pthread termination");
     pthread_join(thread_udp,   NULL);
     pthread_join(thread_mgmt,  NULL);
     pthread_join(thread_flush, NULL);
-    pthread_join(thread_queue, NULL);
+    /* pthread_join(thread_queue, NULL); */
     syslog(LOG_DEBUG, "Pthreads terminated");
   }
 
@@ -571,7 +582,7 @@ void process_json_stats_object(json_object *sobj) {
     }
 
     char *key_name = (char *) json_object_get_string(timer_obj);
-    sanitize_key(key_name);
+//    sanitize_key(key_name);
     double value = json_object_get_double(value_obj);
 
     update_timer(key_name, value);
@@ -585,7 +596,7 @@ void process_json_stats_object(json_object *sobj) {
     }
 
     char *key_name = (char *) json_object_get_string(counter_obj);
-    sanitize_key(key_name);
+//    sanitize_key(key_name);
     double value = json_object_get_double(value_obj);
     double sample_rate = sample_rate_obj ? json_object_get_double(sample_rate_obj) : 0;
 
@@ -612,7 +623,7 @@ void process_stats_packet(char buf_in[]) {
     if (i == 1) {
       syslog(LOG_DEBUG, "Found token '%s', key name\n", token);
       key_name = strdup( token );
-      sanitize_key(key_name);
+//      sanitize_key(key_name);
       /* break; */
     } else {
       syslog(LOG_DEBUG, "\ttoken [#%d] = %s\n", i, token);
@@ -632,7 +643,7 @@ void process_stats_packet(char buf_in[]) {
           subtoken = strtok_r(fields, "|", &subsave);
           if (subtoken == NULL) { break; }
           syslog(LOG_DEBUG, "\t\tsubtoken = %s\n", subtoken);
-  
+
           switch (j) {
             case 1:
               syslog(LOG_DEBUG, "case 1");
@@ -690,7 +701,7 @@ void process_stats_packet(char buf_in[]) {
 
   syslog(LOG_DEBUG, "freeing key and value");
   if (key_name) free(key_name);
-      
+
   UPDATE_LAST_MSG_SEEN()
 }
 
@@ -753,7 +764,7 @@ void p_thread_udp(void *ptr) {
         /* make sure that the buf_in is NULL terminated */
         buf_in[BUFLEN - 1] = 0;
 
-        syslog(LOG_DEBUG, "UDP: Received packet from %s:%d\nData: %s\n\n", 
+        syslog(LOG_DEBUG, "UDP: Received packet from %s:%d\nData: %s\n\n",
             inet_ntoa(si_other.sin_addr), ntohs(si_other.sin_port), buf_in);
 
         char *packet = strdup(buf_in);
@@ -771,29 +782,26 @@ void p_thread_udp(void *ptr) {
 }
 
 void p_thread_queue(void *ptr) {
-  syslog(LOG_INFO, "Thread[Queue]: Starting thread %d\n", (int) *((int *) ptr));
+  /* syslog(LOG_INFO, "Thread[Queue]: Starting thread %d\n", (int) *((int *) ptr)); */
+  syslog(LOG_DEBUG,"Running thread processing pass");
 
-  while (1) {
-    char *packet = queue_pop_first();
-    while (packet != NULL) {
-      char buf_in[BUFLEN];
-      memset(&buf_in, 0, sizeof(buf_in));
-      strcpy(buf_in, packet);
+  char *packet = queue_pop_first();
+  while (packet != NULL) {
+    char buf_in[BUFLEN];
+    memset(&buf_in, 0, sizeof(buf_in));
+    strcpy(buf_in, packet);
 
-      if (buf_in[0] == '{' || buf_in[0] == '[') {
-        syslog(LOG_DEBUG, "Queue: Processing as JSON packet");
-        process_json_stats_packet(buf_in);
-      } else {
-        syslog(LOG_DEBUG, "Queue: Processing as standard packet");
-        process_stats_packet(buf_in);
-      }
-      packet = queue_pop_first();
+    if (buf_in[0] == '{' || buf_in[0] == '[') {
+      syslog(LOG_DEBUG, "Queue: Processing as JSON packet");
+      process_json_stats_packet(buf_in);
+    } else {
+      syslog(LOG_DEBUG, "Queue: Processing as standard packet");
+      process_stats_packet(buf_in);
     }
-    sleep(100);
-  }
+    packet = queue_pop_first();
 
-  syslog(LOG_INFO, "Thread[Queue]: Ending thread %d\n", (int) *((int *) ptr));
-  pthread_exit(0);
+    syslog(LOG_INFO, "Done with thread processing");
+  }
 }
 
 void p_thread_mgmt(void *ptr) {
@@ -814,7 +822,7 @@ void p_thread_mgmt(void *ptr) {
 
   FD_ZERO(&master);
   FD_ZERO(&read_fds);
- 
+
   if((stats_mgmt_socket = socket(AF_INET, SOCK_STREAM, 0)) == -1)
   {
     perror("socke) error");
@@ -825,27 +833,27 @@ void p_thread_mgmt(void *ptr) {
     perror("setsockopt error");
     exit(1);
   }
- 
+
   /* bind */
   serveraddr.sin_family = AF_INET;
   serveraddr.sin_addr.s_addr = INADDR_ANY;
   serveraddr.sin_port = htons(mgmt_port);
   memset(&(serveraddr.sin_zero), '\0', 8);
- 
+
   if(bind(stats_mgmt_socket, (struct sockaddr *)&serveraddr, sizeof(serveraddr)) == -1) {
     exit(1);
   }
- 
+
   if(listen(stats_mgmt_socket, 10) == -1) {
     exit(1);
   }
- 
+
   FD_SET(stats_mgmt_socket, &master);
   fdmax = stats_mgmt_socket;
- 
+
   for(;;) {
     read_fds = master;
- 
+
     if(select(fdmax+1, &read_fds, NULL, NULL, NULL) == -1) {
       perror("select error");
       exit(1);
@@ -875,7 +883,7 @@ void p_thread_mgmt(void *ptr) {
             } else {
               perror("recv() error");
             }
- 
+
             close(i);
             FD_CLR(i, &master);
           } else {
@@ -970,6 +978,7 @@ void p_thread_flush(void *ptr) {
 
     gmetric_t gm;
 
+    p_thread_queue(NULL);
     dump_stats();
 
     if (enable_gmetric) {
@@ -980,13 +989,18 @@ void p_thread_flush(void *ptr) {
       }
     }
 
+    if (enable_carbon) {
+      syslog(LOG_DEBUG, "Attempting carbon flush");
+      if(!carbon_open(carbon_host, carbon_port)) {
+        syslog(LOG_ERR, "Unable to connect to carbon host %s:%d", carbon_host, carbon_port);
+        enable_carbon = 0;
+      }
+    }
+
     long ts = time(NULL);
     char *ts_string = ltoa(ts);
     int numStats = 0;
-#ifdef SEND_GRAPHITE
     char *statString = NULL;
-#endif
-
 
     /* ---------------------------------------------------------------------
       Process counter metrics
@@ -995,10 +1009,10 @@ void p_thread_flush(void *ptr) {
       statsd_counter_t *s_counter, *tmp;
       HASH_ITER(hh, counters, s_counter, tmp) {
         long double value = s_counter->value / flush_interval;
-#ifdef SEND_GRAPHITE
         char message[BUFLEN];
-        sprintf(message, "stats.%s %Lf %ld\nstats_counts_%s %Lf %ld\n", s_counter->key, value, ts, s_counter->key, s_counter->value, ts);
-#endif
+        if(enable_carbon)
+          sprintf(message, "stats.%s %Lf %ld\nstats.counts.%s %Lf %ld\n", s_counter->key, value, ts, s_counter->key, s_counter->value, ts);
+
         if (enable_gmetric) {
           {
             char *k = NULL;
@@ -1008,6 +1022,7 @@ void p_thread_flush(void *ptr) {
             } else {
               k = strdup(s_counter->key);
             }
+            sanitize_key(k);
             SEND_GMETRIC_DOUBLE(k, k, value, "count");
             if (k) free(k);
           }
@@ -1018,14 +1033,15 @@ void p_thread_flush(void *ptr) {
             //if (k) free(k);
           }
         }
-#ifdef SEND_GRAPHITE
-        if (statString) {
-          statString = realloc(statString, strlen(statString) + strlen(message));
-          strcat(statString, message);
-        } else {
-          statString = strdup(message);
+
+        if(enable_carbon) {
+          if (statString) {
+            statString = realloc(statString, strlen(statString) + strlen(message) + 1);
+            strcat(statString, message);
+          } else {
+            statString = strdup(message);
+          }
         }
-#endif
 
         /* Clear counter after we're done with it */
         wait_for_counters_lock();
@@ -1092,59 +1108,65 @@ void p_thread_flush(void *ptr) {
           remove_timers_lock();
 
 
-#ifdef SEND_GRAPHITE
           char message[BUFLEN];
-          sprintf(message, "stats.timers.%s.mean %f %ld\n"
-            "stats.timers.%s.upper %f %ld\n"
-            "stats.timers.%s.upper_%d %f %ld\n"
-            "stats.timers.%s.lower %f %ld\n"
-            "stats.timers.%s.count %d %ld\n",
-            s_timer->key, mean, ts,
-            s_timer->key, max, ts,
-            s_timer->key, pctThreshold, maxAtThreshold, ts,
-            s_timer->key, min, ts,
-            s_timer->key, s_timer->count, ts
-          );
-#endif
+          if(enable_carbon) {
+            sprintf(message, "stats.timers.%s.mean %f %ld\n"
+                    "stats.timers.%s.upper %f %ld\n"
+                    "stats.timers.%s.upper_%d %f %ld\n"
+                    "stats.timers.%s.lower %f %ld\n"
+                    "stats.timers.%s.count %d %ld\n",
+                    s_timer->key, mean, ts,
+                    s_timer->key, max, ts,
+                    s_timer->key, pctThreshold, maxAtThreshold, ts,
+                    s_timer->key, min, ts,
+                    s_timer->key, s_timer->count, ts
+              );
+          }
 
           if (enable_gmetric) {
             {
               // Mean value. Convert to seconds
               char k[strlen(s_timer->key) + 6];
               sprintf(k, "%s_mean", s_timer->key);
+              sanitize_key(k);
               SEND_GMETRIC_DOUBLE(s_timer->key, k, mean/1000, "sec");
             }
             {
               // Max value. Convert to seconds
               char k[strlen(s_timer->key) + 7];
               sprintf(k, "%s_upper", s_timer->key);
+              sanitize_key(k);
               SEND_GMETRIC_DOUBLE(s_timer->key, k, max/1000, "sec");
             }
             {
               // Percentile value. Convert to seconds
               char k[strlen(s_timer->key) + 12];
               sprintf(k, "%s_%dth_pct", s_timer->key, pctThreshold);
+              sanitize_key(k);
               SEND_GMETRIC_DOUBLE(s_timer->key, k, maxAtThreshold/1000, "sec");
             }
             {
               char k[strlen(s_timer->key) + 7];
               sprintf(k, "%s_lower", s_timer->key);
+              sanitize_key(k);
               SEND_GMETRIC_DOUBLE(s_timer->key, k, min/1000, "sec");
             }
             {
               char k[strlen(s_timer->key) + 7];
               sprintf(k, "%s_count", s_timer->key);
+              sanitize_key(k);
               SEND_GMETRIC_INT(s_timer->key, k, s_timer->count, "count");
             }
           }
-#ifdef SEND_GRAPHITE
-          if (statString) {
-            statString = realloc(statString, strlen(statString) + strlen(message));
-            strcat(statString, message);
-          } else {
-            statString = strdup(message);
+
+          if(enable_carbon) {
+            if (statString) {
+              statString = realloc(statString, strlen(statString) + strlen(message) + 1);
+              strcat(statString, message);
+            } else {
+              statString = strdup(message);
+            }
           }
-#endif
         }
         numStats++;
       }
@@ -1153,39 +1175,40 @@ void p_thread_flush(void *ptr) {
     }
 
     {
-#ifdef SEND_GRAPHITE
+
       char *message = malloc(sizeof(char) * BUFLEN);
-      sprintf(message, "statsd.numStats %d %ld\n", numStats, ts);
-#endif
+
       if (enable_gmetric) {
         SEND_GMETRIC_INT("statsd", "statsd_numstats_collected", numStats, "count");
       }
-#ifdef SEND_GRAPHITE
-      if (statString) {
-        statString = realloc(statString, strlen(statString) + strlen(message));
-        strcat(statString, message);
-      } else {
-        statString = strdup(message);
+
+      if(enable_carbon) {
+        sprintf(message, "statsd.numStats %d %ld\n", numStats, ts);
+        if (statString) {
+          statString = realloc(statString, strlen(statString) + strlen(message) + 1);
+          strcat(statString, message);
+        } else {
+          statString = strdup(message);
+        }
       }
-#endif
     }
 
-    /* TODO: Flush to graphite */
-#ifdef SEND_GRAPHITE
-    printf("Messages:\n%s", statString);
-#endif
+    if(enable_carbon) {
+      carbon_send(statString);
+    }
 
     if (enable_gmetric) {
       gmetric_close(&gm);
     }
 
     if (ts_string) free(ts_string);
-#ifdef SEND_GRAPHITE
     if (statString) free(statString);
-#endif
   }
 
   syslog(LOG_INFO, "Thread[Flush]: Ending thread %d\n", (int) *((int *) ptr));
   pthread_exit(0);
 }
 
+/* Local Variables:  */
+/* c-basic-offset: 2 */
+/* End:              */

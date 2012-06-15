@@ -31,15 +31,15 @@ check_function_exists ( vasprintf HAVE_VASPRINTF )
 
 # Platform specific options
 if ( ${CMAKE_SYSTEM} MATCHES "Linux" )
-	set ( CMAKE_C_FLAGS "-Wno-format-security -Wno-int-to-pointer-cast -Isrc/json-c -Isrc/embeddedgmetric -fPIC -pthread" )
+        set ( CMAKE_C_FLAGS "-Wno-format-security -Wno-int-to-pointer-cast -Isrc/json-c -Isrc/embeddedgmetric -fPIC -pthread" )
 endif ( ${CMAKE_SYSTEM} MATCHES "Linux" )
 
 if ( ${CMAKE_SYSTEM} MATCHES "Darwin" )
-	set ( CMAKE_C_FLAGS "-Wno-format-security -Wno-int-to-pointer-cast -Isrc/json-c -Isrc/embeddedgmetric -fPIC -pthread" )
+        set ( CMAKE_C_FLAGS "-Wno-format-security -Wno-int-to-pointer-cast -Isrc/json-c -Isrc/embeddedgmetric -fPIC -pthread" )
 endif ( ${CMAKE_SYSTEM} MATCHES "Darwin" )
 
 if ( ${CMAKE_SYSTEM} MATCHES "OS2" )
-	set ( CMAKE_C_FLAGS "-Wno-format-security -Wno-int-to-pointer-cast -Isrc/json-c -Isrc/embeddedgmetric -fPIC -pthread" )
+        set ( CMAKE_C_FLAGS "-Wno-format-security -Wno-int-to-pointer-cast -Isrc/json-c -Isrc/embeddedgmetric -fPIC -pthread" )
 endif ( ${CMAKE_SYSTEM} MATCHES "OS2" )
 
 # Passing variables
@@ -50,7 +50,7 @@ configure_file (
 include_directories("${PROJECT_BINARY_DIR}")
 
 # Daemon binary
-add_executable(statsd src/statsd.c src/queue.c src/serialize.c src/strings.c src/embeddedgmetric/embeddedgmetric.c src/embeddedgmetric/modp_numtoa.c src/json-c/arraylist.c src/json-c/debug.c src/json-c/json_object.c src/json-c/json_tokener.c src/json-c/json_util.c src/json-c/linkhash.c src/json-c/printbuf.c)
+add_executable(statsd src/statsd.c src/queue.c src/serialize.c src/strings.c src/embeddedgmetric/embeddedgmetric.c src/embeddedgmetric/modp_numtoa.c src/json-c/arraylist.c src/json-c/debug.c src/json-c/json_object.c src/json-c/json_tokener.c src/json-c/json_util.c src/json-c/linkhash.c src/json-c/printbuf.c src/carbon.c)
 
 # Client binary
 add_executable(statsd_client src/statsd_client.c)
@@ -70,4 +70,3 @@ set ( CPACK_PACKAGE_NAME ${PACKAGE} )
 set ( CPACK_STRIP_FILES ON )
 
 include ( CPack )
-
