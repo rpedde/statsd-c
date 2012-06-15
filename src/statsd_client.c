@@ -103,7 +103,7 @@ int main(int argc, char *argv[]) {
 /*  memset(&sa, 0, sizeof(struct sockaddr_in)); */
   sa->sin_family = AF_INET;
   sa->sin_port = htons(port);
-  memcpy(&sa->sin_addr, &ip, sizeof(ip));
+  memcpy(&sa->sin_addr, ip, sizeof(ip));
   if (performance_test) {
     double starting_time, ending_time;
     int err = 0;
@@ -158,4 +158,3 @@ void usage(char *argv[]) {
   fprintf(stderr, "\t-P               Performance testing mode (disabled by default)\n");
   fprintf(stderr, "\nBoth a counter and timer cannot exist at the same time.\n");
 }
-
